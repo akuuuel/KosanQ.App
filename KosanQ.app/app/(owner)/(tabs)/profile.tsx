@@ -11,6 +11,8 @@ import { useRouter } from 'expo-router';
 import { getKostsByOwner } from '../../../src/services/kostService';
 import { listenRooms } from '../../../src/services/roomService';
 import { listenTenantsByKost } from '../../../src/services/tenantService';
+import { CustomAlert } from '../../../src/components/CustomAlert';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 export default function OwnerProfileScreen() {
   const { profile } = useAuth();
@@ -18,6 +20,7 @@ export default function OwnerProfileScreen() {
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ totalKosts: 0, totalRooms: 0, totalTenants: 0 });
   const [showInfoModal, setShowInfoModal] = React.useState<{ visible: boolean, title: string, content: string }>({ visible: false, title: '', content: '' });
+  const [alertVisible, setAlertVisible] = useState(false);
 
   useEffect(() => {
     if (profile?.uid) {
@@ -56,7 +59,7 @@ export default function OwnerProfileScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -80,10 +83,7 @@ export default function OwnerProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Keluar', 'Apakah Anda yakin ingin keluar?', [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Keluar', style: 'destructive', onPress: () => signOut(auth) }
-    ]);
+    setAlertVisible(true);
   };
 
   const handleSecurity = () => {
@@ -136,42 +136,91 @@ export default function OwnerProfileScreen() {
     </View>
   );
 
+  const isProfileComplete = 
+    profile?.name && 
+    profile?.email && 
+    profile?.whatsapp && 
+    profile?.photoURL && 
+    profile?.ktpURL &&
+    profile?.selfieKTPURL &&
+    profile?.npwp &&
+    profile?.address &&
+    profile?.bankName &&
+    profile?.bankAccount;
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <StatusBar barStyle="light-content" backgroundColor="#00AA13" />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.avatar} onPress={pickImage} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : profile?.photoURL ? (
-            <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
-          ) : (
-            <FontAwesome5 name="user-tie" size={32} color="#fff" />
-          )}
-          <View style={styles.editBadge}>
-            <FontAwesome5 name="camera" size={10} color="#00AA13" />
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.name}>{profile?.name || 'Juragan Kost'}</Text>
-        <Text style={styles.email}>{profile?.email}</Text>
+        {!profile ? (
+          <>
+            <SkeletonLoader width={100} height={100} borderRadius={50} style={{ marginBottom: 15 }} />
+            <SkeletonLoader width={180} height={22} style={{ marginBottom: 8 }} />
+            <SkeletonLoader width={140} height={14} />
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.avatar} onPress={pickImage} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : profile?.photoURL ? (
+                <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
+              ) : (
+                <FontAwesome5 name="user-tie" size={32} color="#fff" />
+              )}
+              <View style={styles.editBadge}>
+                <FontAwesome5 name="camera" size={10} color="#00AA13" />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.name}>{profile?.name || 'Juragan Kost'}</Text>
+            <Text style={styles.email}>{profile?.email}</Text>
+          </>
+        )}
         <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{stats.totalKosts}</Text>
-            <Text style={styles.statLabel}>Kost</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{stats.totalRooms}</Text>
-            <Text style={styles.statLabel}>Kamar</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{stats.totalTenants}</Text>
-            <Text style={styles.statLabel}>Penghuni</Text>
-          </View>
+          {!profile ? (
+            <>
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+            </>
+          ) : (
+            <>
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{stats.totalKosts}</Text>
+                <Text style={styles.statLabel}>Kost</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{stats.totalRooms}</Text>
+                <Text style={styles.statLabel}>Kamar</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{stats.totalTenants}</Text>
+                <Text style={styles.statLabel}>Penghuni</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
       <View style={styles.content}>
+        {!isProfileComplete && (
+          <TouchableOpacity 
+            style={styles.warningBanner} 
+            onPress={() => router.push('/(owner)/edit-profile')}
+          >
+            <View style={styles.warningIcon}>
+              <FontAwesome5 name="exclamation-triangle" size={16} color="#F59E0B" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warningTitle}>Profil Belum Lengkap</Text>
+              <Text style={styles.warningSub}>Lengkapi data legalitas agar Anda bisa mendaftarkan kost baru.</Text>
+            </View>
+            <FontAwesome5 name="chevron-right" size={12} color="#F59E0B" />
+          </TouchableOpacity>
+        )}
         <MenuSection 
           title="Manajemen Akun" 
           items={[
@@ -206,6 +255,19 @@ export default function OwnerProfileScreen() {
           </View>
         </View>
       </Modal>
+      <CustomAlert 
+        visible={alertVisible}
+        title="Konfirmasi Keluar"
+        message="Apakah Anda yakin ingin keluar dari akun Owner Anda?"
+        type="logout"
+        confirmText="Keluar"
+        cancelText="Batal"
+        onClose={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          signOut(auth);
+        }}
+      />
     </ScrollView>
   );
 }
@@ -294,4 +356,33 @@ const styles = StyleSheet.create({
   modalBody: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 24 },
   closeBtn: { backgroundColor: '#00AA13', paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
   closeBtnText: { color: '#fff', fontWeight: 'bold' },
+  warningBanner: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 24,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    gap: 12,
+  },
+  warningIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FFEDD5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  warningTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#9A3412',
+  },
+  warningSub: {
+    fontSize: 12,
+    color: '#C2410C',
+    marginTop: 2,
+  },
 });

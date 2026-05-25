@@ -54,3 +54,14 @@ export const deleteBooking = async (bookingId: string) => {
   const bookingRef = doc(db, 'bookings', bookingId);
   return await deleteDoc(bookingRef);
 };
+
+export const checkPendingBooking = async (userId: string, kostId: string) => {
+  const q = query(
+    collection(db, 'bookings'),
+    where('userId', '==', userId),
+    where('kostId', '==', kostId),
+    where('status', '==', 'pending')
+  );
+  const snapshot = await getDocs(q);
+  return !snapshot.empty;
+};

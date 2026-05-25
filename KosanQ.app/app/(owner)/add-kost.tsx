@@ -7,13 +7,18 @@ import { useAuth } from '../../src/context/AuthContext';
 import { CustomInput } from '../../src/components/CustomInput';
 import { CustomButton } from '../../src/components/CustomButton';
 import { CustomAlert } from '../../src/components/CustomAlert';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { MapPicker } from '../../src/components/MapPicker';
 import { validateRequiredFields, sanitizeText } from '../../src/utils/validation';
 import * as Location from 'expo-location';
+import { getKostById, updateKost } from '../../src/services/kostService';
 
 export default function AddKostScreen() {
+  const params = useLocalSearchParams();
+  const kostId = params.id as string;
+  const isEditing = !!kostId;
+
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [location, setLocation] = useState('');
@@ -28,8 +33,36 @@ export default function AddKostScreen() {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertData, setAlertData] = useState({ title: '', message: '', type: 'info' as any, onConfirm: () => {} });
 
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const router = useRouter();
+
+  React.useEffect(() => {
+    if (isEditing) {
+      loadKostData();
+    }
+  }, [isEditing]);
+
+  const loadKostData = async () => {
+    setLoading(true);
+    try {
+      const kost = await getKostById(kostId);
+      if (kost) {
+        setName(kost.name);
+        setPrice(kost.price.toString());
+        setLocation(kost.location);
+        setDescription(kost.description || '');
+        setImages(kost.images || []);
+        setType(kost.type as any || 'putra');
+        if (kost.latitude && kost.longitude) {
+          setCoords({ latitude: kost.latitude, longitude: kost.longitude });
+        }
+      }
+    } catch (e) {
+      showAlert('Error', 'Gagal memuat data kost untuk diedit', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const showAlert = (title: string, message: string, type: any = 'info', onConfirm?: () => void) => {
     setAlertData({ title, message, type, onConfirm: onConfirm || (() => setAlertVisible(false)) });
@@ -38,7 +71,7 @@ export default function AddKostScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsMultipleSelection: true,
       quality: 1,
     });
@@ -52,7 +85,6 @@ export default function AddKostScreen() {
       try {
         const uris = [];
         for (const asset of result.assets) {
-          // Validasi Size & Type
           validateImage(asset.fileSize || 0, asset.mimeType || 'image/jpeg');
           uris.push(asset.uri);
         }
@@ -64,6 +96,37 @@ export default function AddKostScreen() {
   };
 
   const handleUpload = async () => {
+    if (!profile) return;
+
+    // Check if profile is complete with legal data
+    const isProfileComplete = 
+      profile.name && 
+      profile.email && 
+      profile.whatsapp && 
+      profile.photoURL && 
+      profile.bio && 
+      profile.ktpURL &&
+      profile.selfieKTPURL &&
+      profile.npwp &&
+      profile.address &&
+      profile.bankName &&
+      profile.bankAccount;
+
+    if (!isProfileComplete) {
+      showAlert(
+        'Legalitas Belum Lengkap', 
+        'Sebagai pemilik legal, Anda wajib melengkapi data NPWP, Selfie KTP, dan Rekening Bank sebelum mendaftarkan properti baru.', 
+        'warning',
+        () => {
+          setAlertVisible(false);
+          router.push('/(owner)/edit-profile');
+        }
+      );
+      // Update data alert agar tombolnya lebih jelas
+      setAlertData(prev => ({ ...prev, confirmText: 'Lengkapi Sekarang' }));
+      return;
+    }
+
     const validationError = validateRequiredFields({ Nama: name, Harga: price, Lokasi: location });
     if (validationError || images.length === 0) {
       showAlert('Data Belum Lengkap', validationError || 'Pilih minimal satu gambar', 'warning');
@@ -74,30 +137,46 @@ export default function AddKostScreen() {
     try {
       const uploadedUrls = [];
       for (const uri of images) {
-        const compressedBase64 = await compressAndResizeImage(uri);
-        const url = await uploadImage(compressedBase64, 'kosts');
-        uploadedUrls.push(url);
+        // If the uri is already a firebase URL, skip compression and upload
+        if (uri.startsWith('http')) {
+          uploadedUrls.push(uri);
+        } else {
+          const compressedBase64 = await compressAndResizeImage(uri);
+          const url = await uploadImage(compressedBase64, 'kosts');
+          uploadedUrls.push(url);
+        }
       }
 
-      await createKost({
+      const kostData = {
         name: sanitizeText(name),
         price: parseInt(price),
         location: sanitizeText(location),
         description: sanitizeText(description),
-        images: images,
+        images: uploadedUrls,
         ownerId: user!.uid,
-        status: 'pending' as any,
         type,
         latitude: coords?.latitude,
         longitude: coords?.longitude,
-      });
+      };
 
-      showAlert('Berhasil!', 'Kost Anda berhasil diajukan dan sedang menunggu verifikasi admin.', 'success', () => {
-        setAlertVisible(false);
-        router.back();
-      });
-    } catch (error) {
-      showAlert('Gagal', 'Terjadi kesalahan saat mengunggah kost. Silakan coba lagi.', 'error');
+      if (isEditing) {
+        await updateKost(kostId, kostData);
+        showAlert('Berhasil!', 'Data Kost Anda berhasil diperbarui.', 'success', () => {
+          setAlertVisible(false);
+          router.back();
+        });
+      } else {
+        await createKost({
+          ...kostData,
+          status: 'pending' as any,
+        });
+        showAlert('Berhasil!', 'Kost Anda berhasil diajukan dan sedang menunggu verifikasi admin.', 'success', () => {
+          setAlertVisible(false);
+          router.back();
+        });
+      }
+    } catch (error: any) {
+      showAlert('Gagal', error.message || 'Terjadi kesalahan saat menyimpan kost. Silakan coba lagi.', 'error');
       console.error(error);
     } finally {
       setLoading(false);
@@ -111,15 +190,30 @@ export default function AddKostScreen() {
     }
     setGeocoding(true);
     try {
-      const results = await Location.geocodeAsync(location);
+      let results = await Location.geocodeAsync(location);
+      
+      // Jika pencarian bawaan HP gagal, gunakan pencarian cadangan (OpenStreetMap Nominatim)
+      if (results.length === 0) {
+        console.log('Menggunakan pencarian cadangan...');
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`);
+        const json = await response.json();
+        if (json && json.length > 0) {
+          results = [{
+            latitude: parseFloat(json[0].lat),
+            longitude: parseFloat(json[0].lon)
+          }] as any;
+        }
+      }
+
       if (results.length > 0) {
         const { latitude, longitude } = results[0];
         setCoords({ latitude, longitude });
+        showAlert('Lokasi Ditemukan', `Peta telah bergeser ke: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, 'success');
       } else {
-        showAlert('Tidak Ditemukan', 'Alamat tidak ditemukan di peta. Coba masukkan alamat yang lebih spesifik.', 'warning');
+        showAlert('Tidak Ditemukan', 'Alamat tidak ditemukan. Coba masukkan nama jalan atau kota yang lebih spesifik.', 'warning');
       }
     } catch (error) {
-      showAlert('Error', 'Gagal memproses alamat.', 'error');
+      showAlert('Error', 'Gagal memproses alamat. Periksa koneksi internet Anda.', 'error');
     } finally {
       setGeocoding(false);
     }
@@ -132,7 +226,7 @@ export default function AddKostScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <FontAwesome5 name="arrow-left" size={20} color="#1C1C1C" />
         </TouchableOpacity>
-        <Text style={styles.title}>Tambah Kost Baru</Text>
+        <Text style={styles.title}>{isEditing ? 'Edit Kost' : 'Tambah Kost Baru'}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -156,7 +250,7 @@ export default function AddKostScreen() {
           
           <Text style={styles.labelSmall}>Tipe Kost</Text>
           <View style={styles.typeSelector}>
-            {(['putra', 'putri', 'campur'] as const).map((t) => (
+          {(['putra', 'putri', 'campur'] as const).map((t) => (
               <TouchableOpacity 
                 key={t} 
                 style={[styles.typeBtn, type === t && styles.typeBtnActive]} 
@@ -178,7 +272,10 @@ export default function AddKostScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Titik Lokasi Peta</Text>
           <Text style={styles.sectionDesc}>Tentukan titik koordinat kost agar pencari mudah menemukan lokasi lewat navigasi.</Text>
-          <MapPicker onLocationSelect={setCoords} />
+          <MapPicker 
+            onLocationSelect={setCoords} 
+            initialLocation={coords || undefined} 
+          />
           {coords && (
             <View style={styles.coordsBadge}>
               <FontAwesome5 name="check-circle" size={12} color="#00AA13" />
@@ -210,7 +307,7 @@ export default function AddKostScreen() {
         </View>
 
         <View style={styles.section}>
-          <CustomButton title="Kirim Broadcast" onPress={handleUpload} loading={loading} />
+          <CustomButton title={isEditing ? 'Simpan Perubahan' : 'Daftarkan Kost'} onPress={handleUpload} loading={loading} />
         </View>
         
         <View style={{ height: 50 }} />
@@ -329,6 +426,19 @@ const styles = StyleSheet.create({
   typeText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
   typeTextActive: { color: '#fff' },
   addressRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  geocodeBtn: { backgroundColor: '#00AA13', width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  geocodeBtn: { 
+    backgroundColor: '#00AA13', 
+    width: 50, 
+    height: 50, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4
+  },
   disabledBtn: { opacity: 0.6 }
 });

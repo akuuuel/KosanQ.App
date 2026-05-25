@@ -5,10 +5,12 @@ import { auth, db } from '../../../src/services/firebase';
 import { signOut } from 'firebase/auth';
 import { useAuth } from '../../../src/context/AuthContext';
 import { useRouter } from 'expo-router';
+import { CustomAlert } from '../../../src/components/CustomAlert';
 
 import * as ImagePicker from 'expo-image-picker';
 import { compressAndResizeImage, uploadImage } from '../../../src/services/storageService';
 import { doc, setDoc } from 'firebase/firestore';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 import { Linking, Modal } from 'react-native';
 
@@ -16,10 +18,11 @@ export default function UserProfileScreen() {
   const { profile } = useAuth();
   const router = useRouter();
   const [showInfoModal, setShowInfoModal] = React.useState<{ visible: boolean, title: string, content: string }>({ visible: false, title: '', content: '' });
+  const [alertVisible, setAlertVisible] = React.useState(false);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -43,10 +46,7 @@ export default function UserProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert('Keluar', 'Apakah Anda yakin ingin keluar?', [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Keluar', style: 'destructive', onPress: () => signOut(auth) }
-    ]);
+    setAlertVisible(true);
   };
 
   const handleSecurity = () => {
@@ -102,34 +102,56 @@ export default function UserProfileScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.avatar} onPress={pickImage}>
-          {profile?.photoURL ? (
-            <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
-          ) : (
-            <FontAwesome5 name="user" size={32} color="#fff" />
-          )}
-          <View style={styles.editBadge}>
-            <FontAwesome5 name="camera" size={10} color="#00AA13" />
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.name}>{profile?.name || 'User KosanQ'}</Text>
-        <Text style={styles.email}>{profile?.email}</Text>
+        {!profile ? (
+          <>
+            <SkeletonLoader width={90} height={90} borderRadius={45} style={{ marginBottom: 16 }} />
+            <SkeletonLoader width={150} height={20} style={{ marginBottom: 8 }} />
+            <SkeletonLoader width={120} height={14} />
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.avatar} onPress={pickImage}>
+              {profile?.photoURL ? (
+                <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
+              ) : (
+                <FontAwesome5 name="user" size={32} color="#fff" />
+              )}
+              <View style={styles.editBadge}>
+                <FontAwesome5 name="camera" size={10} color="#00AA13" />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.name}>{profile?.name || 'User KosanQ'}</Text>
+            <Text style={styles.email}>{profile?.email}</Text>
+          </>
+        )}
         
         <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{profile?.points || 0}</Text>
-            <Text style={styles.statLabel}>Poin</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{profile?.vouchers || 0}</Text>
-            <Text style={styles.statLabel}>Voucher</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statVal}>{profile?.memberStatus || 'Bronze'}</Text>
-            <Text style={styles.statLabel}>Member</Text>
-          </View>
+          {!profile ? (
+            <>
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}><SkeletonLoader width={40} height={20} /></View>
+            </>
+          ) : (
+            <>
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{profile?.points || 0}</Text>
+                <Text style={styles.statLabel}>Poin</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{profile?.vouchers || 0}</Text>
+                <Text style={styles.statLabel}>Voucher</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statVal}>{profile?.memberStatus || 'Bronze'}</Text>
+                <Text style={styles.statLabel}>Member</Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -172,6 +194,19 @@ export default function UserProfileScreen() {
           </View>
         </View>
       </Modal>
+      <CustomAlert 
+        visible={alertVisible}
+        title="Konfirmasi Keluar"
+        message="Apakah Anda yakin ingin keluar dari akun Anda?"
+        type="logout"
+        confirmText="Keluar"
+        cancelText="Batal"
+        onClose={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          signOut(auth);
+        }}
+      />
     </ScrollView>
   );
 }

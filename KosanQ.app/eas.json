@@ -12,7 +12,22 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyA-4KFdEkPSqjBA1zjCmJvDFiZLvO6SRRo",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "kosanq-app.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "kosanq-app",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "kosanq-app.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "839472387922",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:839472387922:web:63434b22449cde88904c8b",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-3BCDSVLQSH",
+        "EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME": "dfwdjikc7",
+        "EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET": "datagambarkosanq"
+      }
     }
   },
   "submit": {

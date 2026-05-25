@@ -30,6 +30,8 @@ export const listenRooms = (kostId: string, callback: (rooms: Room[]) => void) =
   return onSnapshot(q, (snapshot) => {
     const rooms = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
     callback(rooms);
+  }, (error) => {
+    console.error("[RoomService] Listener error:", error);
   });
 };
 

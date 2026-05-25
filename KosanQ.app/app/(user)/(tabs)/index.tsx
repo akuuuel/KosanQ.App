@@ -16,6 +16,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../../src/context/AuthContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Location from 'expo-location';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 export default function UserHomeScreen() {
   const { profile } = useAuth();
@@ -185,16 +186,45 @@ export default function UserHomeScreen() {
       </View>
       
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00AA13" />
+        <View style={styles.listContent}>
+          {/* Skeletons for Quick Actions */}
+          <View style={[styles.quickActions, { paddingHorizontal: 0 }]}>
+            {[1, 2, 3, 4].map((i) => (
+              <View key={i} style={styles.actionItem}>
+                <SkeletonLoader width={48} height={48} borderRadius={14} style={{ marginBottom: 6 }} />
+                <SkeletonLoader width={30} height={10} />
+              </View>
+            ))}
+          </View>
+          
+          <View style={[styles.sectionHeader, { paddingHorizontal: 0 }]}>
+            <SkeletonLoader width={180} height={20} />
+          </View>
+
+          <View style={[styles.columnWrapper, { flexDirection: 'row', flexWrap: 'wrap' }]}>
+            {[1, 2, 3, 4].map((i) => (
+              <View key={i} style={[styles.card, { marginBottom: 16 }]}>
+                <SkeletonLoader width="100%" height={140} />
+                <View style={[styles.cardContent, { gap: 8 }]}>
+                  <SkeletonLoader width={80} height={15} />
+                  <SkeletonLoader width="100%" height={20} />
+                  <SkeletonLoader width={100} height={15} />
+                  <SkeletonLoader width={120} height={20} />
+                </View>
+              </View>
+            ))}
+          </View>
         </View>
       ) : (
         <FlatList
+          key={2} // Force re-render for column change
+          numColumns={2}
           data={displayKosts}
           keyExtractor={(item) => item.id}
           renderItem={renderKostItem}
           contentContainerStyle={styles.listContent}
-          initialNumToRender={5}
+          columnWrapperStyle={styles.columnWrapper}
+          initialNumToRender={10}
           maxToRenderPerBatch={10}
           windowSize={5}
           removeClippedSubviews={true}
@@ -267,8 +297,8 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 25,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
   headerTop: {
     flexDirection: 'row',
@@ -327,21 +357,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 20,
+    paddingBottom: 10,
   },
   actionItem: {
     alignItems: 'center',
     width: '22%',
   },
   actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   actionText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: '#4A4A4A',
     textAlign: 'center',
@@ -352,6 +383,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     marginBottom: 16,
+    marginTop: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -359,53 +391,60 @@ const styles = StyleSheet.create({
     color: '#1C1C1C',
   },
   seeAll: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#00AA13',
     fontWeight: 'bold',
   },
   listContent: {
-    paddingBottom: 150, // Meningkatkan padding bawah agar tidak tertutup tab
+    paddingHorizontal: 10,
+    paddingBottom: 150,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    marginBottom: 16,
   },
   card: {
     backgroundColor: '#fff',
     borderRadius: 20,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    width: '48%',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    elevation: 5,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
   cardImage: {
     width: '100%',
-    height: 180,
+    height: 140,
   },
   cardContent: {
-    padding: 16,
+    padding: 12,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+    gap: 4,
   },
   cardTag: {
-    backgroundColor: '#00AA13',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: '#E6F6E8',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   cardTagText: {
-    color: '#fff',
-    fontSize: 10,
+    color: '#00AA13',
+    fontSize: 9,
     fontWeight: 'bold',
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#1C1C1C',
     marginBottom: 4,
@@ -413,30 +452,32 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   cardLocation: {
-    fontSize: 13,
+    fontSize: 10,
     color: '#64748b',
-    marginLeft: 6,
+    marginLeft: 4,
+    flex: 1,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   cardPrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '900',
     color: '#00AA13',
   },
   priceUnit: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#64748b',
-    marginLeft: 4,
+    marginLeft: 2,
   },
   emptyContainer: {
     alignItems: 'center',
     marginTop: 60,
+    width: '100%',
   },
   emptyText: {
     marginTop: 16,
@@ -453,13 +494,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF7ED',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    gap: 3,
   },
   ratingText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
     color: '#F59E0B',
   },

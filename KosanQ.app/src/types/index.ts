@@ -10,6 +10,12 @@ export interface UserProfile {
   photoURL?: string;
   whatsapp?: string;
   ktpURL?: string;
+  selfieKTPURL?: string; // Foto selfie dengan KTP
+  npwp?: string; // Nomor Pokok Wajib Pajak
+  address?: string; // Alamat lengkap sesuai KTP
+  bankName?: string; // Nama Bank
+  bankAccount?: string; // Nomor Rekening
+  bankAccountName?: string; // Nama di Rekening
   points?: number;
   vouchers?: number;
   memberStatus?: 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
@@ -33,6 +39,7 @@ export interface Kost {
   averageRating?: number;
   totalReviews?: number;
   rejectionReason?: string;
+  showInHistory?: boolean;
   createdAt: number;
 }
 
@@ -81,6 +88,7 @@ export interface Conversation {
 export interface Room {
   id: string;
   kostId: string;
+  ownerId: string; // ID pemilik kost
   roomNumber: string;
   price: number;
   status: 'available' | 'occupied';
@@ -102,6 +110,7 @@ export interface Tenant {
   roomDescription?: string;
   kostId: string;
   kostName: string;
+  ownerId: string;
   startDate: string;
   status: 'active' | 'inactive';
   isActive: boolean;
@@ -129,6 +138,7 @@ export interface PaymentHistory {
   method: string;
   proofImage: string;
   status: 'pending' | 'approved' | 'rejected';
+  note?: string;
   createdAt: number;
 }
 

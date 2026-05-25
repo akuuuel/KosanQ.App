@@ -22,6 +22,7 @@ import { addTenant } from '../../../src/services/tenantService';
 import { Booking, Room } from '../../../src/types';
 import { CustomAlert } from '../../../src/components/CustomAlert';
 import { CustomButton } from '../../../src/components/CustomButton';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 export default function OwnerOrdersScreen() {
   const authData = useAuth();
@@ -116,6 +117,7 @@ export default function OwnerOrdersScreen() {
         userWhatsapp: selectedBooking.userWhatsapp || '',
         kostId: selectedBooking.kostId,
         kostName: selectedBooking.kostName,
+        ownerId: selectedBooking.ownerId, // Tambahkan ownerId
         roomId: selectedRoom.id,
         roomNumber: selectedRoom.roomNumber,
         startDate: new Date().toISOString(),
@@ -130,9 +132,10 @@ export default function OwnerOrdersScreen() {
       setSelectedRoom(null);
       fetchBookings();
       showAlert('Berhasil!', `Penyewa telah disetujui dan ditempatkan di Kamar ${selectedRoom.roomNumber}`, 'success');
-    } catch (error) {
-      console.error(error);
-      showAlert('Gagal', 'Terjadi kesalahan saat memproses persetujuan.', 'error');
+    } catch (error: any) {
+      console.error('[Approval Process Error]:', error);
+      const errorMessage = error.message || 'Terjadi kesalahan saat memproses persetujuan.';
+      showAlert('Gagal', errorMessage, 'error');
     } finally {
       setProcessingApproval(false);
     }
@@ -150,8 +153,9 @@ export default function OwnerOrdersScreen() {
       setRejectModalVisible(false);
       fetchBookings();
       showAlert('Sukses', 'Pesanan berhasil ditolak dengan alasan.', 'success');
-    } catch (error) {
-      showAlert('Error', 'Gagal memproses penolakan', 'error');
+    } catch (error: any) {
+      console.error('[Rejection Error]:', error);
+      showAlert('Error', error.message || 'Gagal memproses penolakan', 'error');
     } finally {
       setLoading(false);
     }
@@ -254,8 +258,27 @@ export default function OwnerOrdersScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00AA13" />
+        <View style={styles.listContent}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={styles.card}>
+              <SkeletonLoader width={100} height={150} />
+              <View style={[styles.cardContent, { gap: 8 }]}>
+                <View style={styles.cardHeader}>
+                  <SkeletonLoader width={120} height={18} />
+                </View>
+                <SkeletonLoader width={140} height={14} />
+                <View style={[styles.userInfo, { gap: 6 }]}>
+                  <SkeletonLoader width={16} height={16} borderRadius={8} />
+                  <SkeletonLoader width={80} height={14} />
+                </View>
+                <SkeletonLoader width={60} height={18} borderRadius={6} />
+                <View style={styles.actionRow}>
+                  <SkeletonLoader width="45%" height={36} borderRadius={8} />
+                  <SkeletonLoader width="45%" height={36} borderRadius={8} />
+                </View>
+              </View>
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList

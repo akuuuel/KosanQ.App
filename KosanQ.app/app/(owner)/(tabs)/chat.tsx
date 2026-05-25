@@ -15,6 +15,7 @@ import { getConversations, deleteConversationForUser } from '../../../src/servic
 import { Conversation } from '../../../src/types';
 import { useRouter } from 'expo-router';
 import { CustomAlert } from '../../../src/components/CustomAlert';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 export default function OwnerChatScreen() {
   const { profile } = useAuth();
@@ -108,8 +109,19 @@ export default function OwnerChatScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00AA13" />
+        <View style={styles.listContent}>
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+            <View key={i} style={styles.card}>
+              <SkeletonLoader width={50} height={50} borderRadius={25} />
+              <View style={[styles.cardContent, { gap: 8 }]}>
+                <View style={styles.cardHeader}>
+                  <SkeletonLoader width={120} height={18} />
+                  <SkeletonLoader width={60} height={12} />
+                </View>
+                <SkeletonLoader width="80%" height={14} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList

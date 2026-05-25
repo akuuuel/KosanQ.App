@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Image, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Image, TextInput, Modal, ScrollView } from 'react-native';
 import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../src/services/firebase';
 import { UserProfile } from '../../src/types';
@@ -12,6 +12,9 @@ export default function AdminUsersScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'user' | 'owner'>('user');
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   // Alert states
   const [alertVisible, setAlertVisible] = useState(false);
@@ -61,24 +64,46 @@ export default function AdminUsersScreen() {
 
   const toggleVerification = async (user: UserProfile) => {
     const newValue = !user.isVerified;
+    setUpdating(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), { isVerified: newValue });
-      
-      // Update local state instead of refetching everything for better UX
       setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isVerified: newValue } : u));
+      if (selectedUser?.uid === user.uid) setSelectedUser({ ...selectedUser, isVerified: newValue });
       showAlert('Sukses', `Status verifikasi ${user.name} diperbarui`, 'success');
     } catch (error) {
       showAlert('Error', 'Gagal memperbarui status', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const changeRole = async (user: UserProfile, newRole: 'user' | 'owner' | 'admin') => {
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { role: newRole });
+      setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, role: newRole } : u));
+      setDetailVisible(false);
+      showAlert('Sukses', `Role ${user.name} diubah menjadi ${newRole}`, 'success');
+    } catch (error) {
+      showAlert('Error', 'Gagal mengubah role', 'error');
+    } finally {
+      setUpdating(false);
     }
   };
 
   const renderItem = ({ item }: { item: UserProfile }) => (
-    <View style={styles.card}>
-      <View style={[styles.avatar, { backgroundColor: activeTab === 'owner' ? '#ec4899' : '#00AA13' }]}>
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={() => {
+        setSelectedUser(item);
+        setDetailVisible(true);
+      }}
+    >
+      <View style={[styles.avatar, { backgroundColor: '#00AA13' }]}>
         {item.photoURL ? (
           <Image source={{ uri: item.photoURL }} style={styles.avatarImg} />
         ) : (
-          <FontAwesome5 name={activeTab === 'owner' ? 'user-tie' : 'user'} size={18} color="#fff" />
+          <FontAwesome5 name={item.role === 'owner' ? 'user-tie' : 'user'} size={18} color="#fff" />
         )}
       </View>
       <View style={styles.info}>
@@ -93,13 +118,10 @@ export default function AdminUsersScreen() {
           )}
         </View>
       </View>
-      <TouchableOpacity 
-        style={[styles.verifyBtn, item.isVerified ? styles.unverifyBtn : (activeTab === 'owner' ? styles.verifyBtnOwner : styles.verifyBtnUser)]} 
-        onPress={() => toggleVerification(item)}
-      >
-        <FontAwesome5 name={item.isVerified ? "user-slash" : "user-check"} size={14} color="#fff" />
-      </TouchableOpacity>
-    </View>
+      <View style={[styles.miniRoleBadge, { backgroundColor: '#E6F6E8' }]}>
+        <Text style={[styles.miniRoleText, { color: '#00AA13' }]}>{item.role}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -120,14 +142,14 @@ export default function AdminUsersScreen() {
 
       <View style={styles.tabContainer}>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'user' && styles.activeTabUser]}
+          style={[styles.tab, activeTab === 'user' && styles.activeTabGreen]}
           onPress={() => setActiveTab('user')}
         >
           <FontAwesome5 name="users" size={14} color={activeTab === 'user' ? '#fff' : '#64748b'} />
           <Text style={[styles.tabText, activeTab === 'user' && styles.activeTabText]}>Pencari Kost</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'owner' && styles.activeTabOwner]}
+          style={[styles.tab, activeTab === 'owner' && styles.activeTabGreen]}
           onPress={() => setActiveTab('owner')}
         >
           <FontAwesome5 name="user-tie" size={14} color={activeTab === 'owner' ? '#fff' : '#64748b'} />
@@ -153,6 +175,89 @@ export default function AdminUsersScreen() {
           }
         />
       )}
+
+      {/* Modal Detail User */}
+      <Modal visible={detailVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detail Pengguna</Text>
+              <TouchableOpacity onPress={() => setDetailVisible(false)} style={styles.closeBtn}>
+                <FontAwesome5 name="times" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedUser && (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <View style={styles.mainInfo}>
+                  <Image 
+                    source={{ uri: selectedUser.photoURL || 'https://via.placeholder.com/150' }} 
+                    style={styles.largeAvatar} 
+                  />
+                  <Text style={styles.detailName}>{selectedUser.name}</Text>
+                  <View style={[styles.roleLabel, { backgroundColor: '#00AA13' }]}>
+                    <Text style={styles.roleLabelText}>{selectedUser.role?.toUpperCase()}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.detailGroups}>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.label}>Email</Text>
+                    <Text style={styles.value}>{selectedUser.email}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.label}>WhatsApp</Text>
+                    <Text style={styles.value}>{selectedUser.whatsapp || '-'}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.label}>Bio</Text>
+                    <Text style={styles.value}>{selectedUser.bio || 'Belum ada bio.'}</Text>
+                  </View>
+                  
+                  <Text style={styles.sectionLabel}>Identitas (KTP)</Text>
+                  {selectedUser.ktpURL ? (
+                    <Image source={{ uri: selectedUser.ktpURL }} style={styles.ktpPreview} resizeMode="contain" />
+                  ) : (
+                    <View style={styles.noKtp}>
+                      <FontAwesome5 name="id-card" size={30} color="#CBD5E1" />
+                      <Text style={styles.noKtpText}>KTP Belum Diunggah</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.actionSection}>
+                  <Text style={styles.sectionLabel}>Tindakan Admin</Text>
+                  <TouchableOpacity 
+                    style={[styles.actionBtnLarge, selectedUser.isVerified ? styles.btnDanger : styles.btnSuccess]}
+                    onPress={() => toggleVerification(selectedUser)}
+                    disabled={updating}
+                  >
+                    <FontAwesome5 name={selectedUser.isVerified ? "user-slash" : "user-check"} size={16} color="#fff" />
+                    <Text style={styles.btnText}>{selectedUser.isVerified ? 'Cabut Verifikasi' : 'Verifikasi Akun'}</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.roleActions}>
+                    <TouchableOpacity 
+                      style={[styles.btnOutline, selectedUser.role === 'owner' && styles.disabledBtn]}
+                      onPress={() => changeRole(selectedUser, 'owner')}
+                      disabled={updating || selectedUser.role === 'owner'}
+                    >
+                      <Text style={styles.btnOutlineText}>Jadikan Owner</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.btnOutline, selectedUser.role === 'user' && styles.disabledBtn]}
+                      onPress={() => changeRole(selectedUser, 'user')}
+                      disabled={updating || selectedUser.role === 'user'}
+                    >
+                      <Text style={styles.btnOutlineText}>Jadikan User</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <CustomAlert 
         visible={alertVisible}
@@ -205,8 +310,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
-  activeTabUser: { backgroundColor: '#00AA13' },
-  activeTabOwner: { backgroundColor: '#ec4899' },
+  activeTabGreen: { backgroundColor: '#00AA13' },
   tabText: { fontSize: 13, fontWeight: 'bold', color: '#64748b' },
   activeTabText: { color: '#fff' },
   listContent: { padding: 20, paddingBottom: 100 },
@@ -244,8 +348,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   verifyBtnUser: { backgroundColor: '#00AA13' },
-  verifyBtnOwner: { backgroundColor: '#ec4899' },
+  verifyBtnOwner: { backgroundColor: '#00AA13' },
   unverifyBtn: { backgroundColor: '#EE2737' },
   emptyContainer: { alignItems: 'center', marginTop: 100 },
-  emptyText: { color: '#64748b', fontSize: 14, marginTop: 12 }
+  emptyText: { color: '#64748b', fontSize: 14, marginTop: 12 },
+  miniRoleBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  miniRoleText: { fontSize: 10, fontWeight: 'bold' },
+  
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '90%', padding: 24 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1C1C1C' },
+  closeBtn: { padding: 4 },
+  mainInfo: { alignItems: 'center', marginBottom: 30 },
+  largeAvatar: { width: 100, height: 100, borderRadius: 50, marginBottom: 16, borderWidth: 3, borderColor: '#F1F5F9' },
+  detailName: { fontSize: 22, fontWeight: 'bold', color: '#1C1C1C', marginBottom: 8 },
+  roleLabel: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10 },
+  roleLabelText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  detailGroups: { gap: 20, marginBottom: 30 },
+  detailItem: { borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 12 },
+  label: { fontSize: 12, color: '#64748b', marginBottom: 4 },
+  value: { fontSize: 15, color: '#1C1C1C', fontWeight: '500' },
+  sectionLabel: { fontSize: 14, fontWeight: 'bold', color: '#64748b', marginTop: 10, marginBottom: 12 },
+  ktpPreview: { width: '100%', height: 200, borderRadius: 16, backgroundColor: '#F8FAFC' },
+  noKtp: { height: 150, backgroundColor: '#F8FAFC', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1' },
+  noKtpText: { color: '#94a3b8', fontSize: 12, marginTop: 8 },
+  actionSection: { paddingBottom: 40 },
+  actionBtnLarge: { flexDirection: 'row', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 16 },
+  btnSuccess: { backgroundColor: '#00AA13' },
+  btnDanger: { backgroundColor: '#EE2737' },
+  btnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  roleActions: { flexDirection: 'row', gap: 12 },
+  btnOutline: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
+  btnOutlineText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
+  disabledBtn: { opacity: 0.4 }
 });

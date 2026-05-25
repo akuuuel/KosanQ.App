@@ -88,6 +88,21 @@ export const getOwnerKosts = async (ownerId: string) => {
   }
 };
 
+export const getApprovedOwnerKosts = async (ownerId: string) => {
+  try {
+    const q = query(
+      collection(db, KOSTS_COLLECTION), 
+      where('ownerId', '==', ownerId),
+      where('status', '==', 'approved')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kost));
+  } catch (error) {
+    console.error('Error fetching approved owner kosts:', error);
+    throw error;
+  }
+};
+
 // Alias to maintain compatibility with new management screens
 export const getKostsByOwner = getOwnerKosts;
 

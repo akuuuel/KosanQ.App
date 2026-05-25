@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Alert, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { doc, setDoc } from 'firebase/firestore';
@@ -10,7 +10,7 @@ import { CustomAlert } from '../../src/components/CustomAlert';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { compressAndResizeImage, uploadImage } from '../../src/services/storageService';
-import { Image, ActivityIndicator } from 'react-native';
+
 
 export default function EditProfileScreen() {
   const { profile } = useAuth();
@@ -19,6 +19,12 @@ export default function EditProfileScreen() {
   const [whatsapp, setWhatsapp] = useState(profile?.whatsapp || '');
   const [photoURL, setPhotoURL] = useState(profile?.photoURL || '');
   const [ktpURL, setKtpURL] = useState(profile?.ktpURL || '');
+  const [selfieKTPURL, setSelfieKTPURL] = useState(profile?.selfieKTPURL || '');
+  const [npwp, setNpwp] = useState(profile?.npwp || '');
+  const [address, setAddress] = useState(profile?.address || '');
+  const [bankName, setBankName] = useState(profile?.bankName || '');
+  const [bankAccount, setBankAccount] = useState(profile?.bankAccount || '');
+  const [bankAccountName, setBankAccountName] = useState(profile?.bankAccountName || '');
   
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -33,27 +39,62 @@ export default function EditProfileScreen() {
     setAlertVisible(true);
   };
 
-  const pickImage = async (type: 'profile' | 'ktp') => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: type === 'profile',
-      aspect: [1, 1],
-      quality: 0.7,
-    });
+  const pickImage = async (type: 'profile' | 'ktp' | 'selfie') => {
+    const showOptions = () => {
+      Alert.alert(
+        'Pilih Sumber Foto',
+        'Pilih foto dari galeri atau ambil foto baru dengan kamera',
+        [
+          { text: 'Batal', style: 'cancel' },
+          { text: 'Buka Galeri', onPress: () => processImage('gallery', type) },
+          { text: 'Ambil Foto (Kamera)', onPress: () => processImage('camera', type) },
+        ]
+      );
+    };
 
-    if (!result.canceled) {
-      setUploading(true);
-      try {
-        const compressedBase64 = await compressAndResizeImage(result.assets[0].uri);
-        const url = await uploadImage(compressedBase64, type === 'profile' ? 'avatars' : 'ktp');
-        if (type === 'profile') setPhotoURL(url);
-        else setKtpURL(url);
-      } catch (error) {
-        showAlert('Error', 'Gagal mengunggah gambar. Silakan coba lagi.', 'error');
-      } finally {
-        setUploading(false);
+    const processImage = async (mode: 'gallery' | 'camera', imgType: 'profile' | 'ktp' | 'selfie') => {
+      let result;
+
+      if (mode === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          showAlert('Izin Ditolak', 'Maaf, kami butuh izin kamera untuk mengambil foto.', 'error');
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: 'images',
+          allowsEditing: imgType === 'profile',
+          aspect: [imgType === 'profile' ? 1 : 4, imgType === 'profile' ? 1 : 3],
+          quality: 0.7,
+        });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: 'images',
+          allowsEditing: imgType === 'profile',
+          aspect: [imgType === 'profile' ? 1 : 4, imgType === 'profile' ? 1 : 3],
+          quality: 0.7,
+        });
       }
-    }
+
+      if (!result.canceled) {
+        setUploading(true);
+        try {
+          const compressedBase64 = await compressAndResizeImage(result.assets[0].uri);
+          const folder = imgType === 'profile' ? 'avatars' : imgType === 'ktp' ? 'ktp' : 'selfie-ktp';
+          const url = await uploadImage(compressedBase64, folder);
+
+          if (imgType === 'profile') setPhotoURL(url);
+          else if (imgType === 'ktp') setKtpURL(url);
+          else if (imgType === 'selfie') setSelfieKTPURL(url);
+        } catch (error) {
+          showAlert('Error', 'Gagal mengunggah gambar. Silakan coba lagi.', 'error');
+        } finally {
+          setUploading(false);
+        }
+      }
+    };
+
+    showOptions();
   };
 
   const handleSave = async () => {
@@ -71,6 +112,12 @@ export default function EditProfileScreen() {
         whatsapp: whatsapp.trim(),
         photoURL,
         ktpURL,
+        selfieKTPURL,
+        npwp: npwp.trim(),
+        address: address.trim(),
+        bankName: bankName.trim(),
+        bankAccount: bankAccount.trim(),
+        bankAccountName: bankAccountName.trim(),
       }, { merge: true });
       
       showAlert('Sukses!', 'Profil Anda berhasil diperbarui.', 'success', () => {
@@ -86,7 +133,12 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -113,6 +165,7 @@ export default function EditProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Biodata Dasar</Text>
           <CustomInput 
             label="Nama Lengkap" 
             value={name} 
@@ -141,7 +194,7 @@ export default function EditProfileScreen() {
             {uploading ? (
               <ActivityIndicator color="#00AA13" />
             ) : ktpURL ? (
-              <View>
+              <View style={styles.imgWrapper}>
                 <Image source={{ uri: ktpURL }} style={styles.ktpPreview} resizeMode="cover" />
                 <View style={styles.changeBadge}>
                   <Text style={styles.changeText}>Ganti Foto</Text>
@@ -155,6 +208,74 @@ export default function EditProfileScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        {profile?.role === 'owner' && (
+          <View style={styles.section}>
+            <View style={styles.legalHeader}>
+               <FontAwesome5 name="shield-alt" size={16} color="#00AA13" />
+               <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 8 }]}>Data Legalitas (Pemilik Kost)</Text>
+            </View>
+            <View style={styles.legalNotice}>
+              <Text style={styles.legalNoticeText}>Data ini digunakan untuk verifikasi identitas dan pencairan dana sewa secara aman.</Text>
+            </View>
+            
+            <CustomInput 
+              label="Nomor NPWP" 
+              value={npwp} 
+              onChangeText={setNpwp} 
+              placeholder="Contoh: 12.345.678.9-012.000" 
+              keyboardType="numeric"
+            />
+
+            <CustomInput 
+              label="Alamat Lengkap (Sesuai KTP)" 
+              value={address} 
+              onChangeText={setAddress} 
+              placeholder="Jl. Merdeka No. 1, Kota..." 
+              multiline
+            />
+
+            <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Foto Selfie dengan KTP</Text>
+            <TouchableOpacity style={styles.ktpPicker} onPress={() => pickImage('selfie')} disabled={uploading}>
+              {uploading ? (
+                <ActivityIndicator color="#00AA13" />
+              ) : selfieKTPURL ? (
+                <View style={styles.imgWrapper}>
+                  <Image source={{ uri: selfieKTPURL }} style={styles.ktpPreview} resizeMode="cover" />
+                  <View style={styles.changeBadge}>
+                    <Text style={styles.changeText}>Ganti Foto</Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.ktpPlaceholder}>
+                  <FontAwesome5 name="user-check" size={30} color="#64748b" />
+                  <Text style={styles.ktpText}>Upload Selfie + KTP</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Informasi Rekening Bank</Text>
+            <CustomInput 
+              label="Nama Bank" 
+              value={bankName} 
+              onChangeText={setBankName} 
+              placeholder="Contoh: BCA, Mandiri, BNI..." 
+            />
+            <CustomInput 
+              label="Nomor Rekening" 
+              value={bankAccount} 
+              onChangeText={setBankAccount} 
+              placeholder="Contoh: 1234567890" 
+              keyboardType="numeric"
+            />
+            <CustomInput 
+              label="Atas Nama Rekening" 
+              value={bankAccountName} 
+              onChangeText={setBankAccountName} 
+              placeholder="Harus sesuai dengan nama di KTP" 
+            />
+          </View>
+        )}
 
         <CustomButton 
           title="Simpan Perubahan" 
@@ -171,7 +292,8 @@ export default function EditProfileScreen() {
         onClose={() => setAlertVisible(false)}
         onConfirm={alertData.onConfirm}
       />
-    </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -198,7 +320,11 @@ const styles = StyleSheet.create({
   ktpPicker: { width: '100%', height: 180, backgroundColor: '#f1f5f9', borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#cbd5e1', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   ktpPlaceholder: { alignItems: 'center' },
   ktpText: { fontSize: 14, color: '#64748b', marginTop: 8 },
-  ktpPreview: { width: '100%', height: '100%' },
+  imgWrapper: { width: '100%', height: 180, position: 'relative' },
+  ktpPreview: { width: '100%', height: 180, borderRadius: 14 },
   changeBadge: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
   changeText: { color: '#fff', fontSize: 12 },
+  legalHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  legalNotice: { backgroundColor: '#F0FDF4', padding: 12, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#DCFCE7' },
+  legalNoticeText: { fontSize: 12, color: '#166534', lineHeight: 18 },
 });

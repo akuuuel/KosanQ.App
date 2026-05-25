@@ -387,12 +387,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const q = query(collection(db, 'payments'), where('ownerId', '==', profile.uid));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pendingPayments = snapshot.docs.filter(d => {
+      let totalPending = 0;
+      snapshot.docs.forEach(d => {
         const data = d.data();
-        return data.history?.some((h: any) => h.status === 'pending');
+        totalPending += (data.history || []).filter((h: any) => h.status === 'pending').length;
       });
       
-      setNewPaymentCount(pendingPayments.length);
+      setNewPaymentCount(totalPending);
 
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'modified' || change.type === 'added') {

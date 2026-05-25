@@ -94,6 +94,8 @@ export const listenKostReviews = (kostId: string, callback: (reviews: Review[]) 
     
     // Sort locally
     callback(reviews.sort((a, b) => b.createdAt - a.createdAt));
+  }, (error) => {
+    console.error("[ReviewService] Listener error:", error);
   });
 };
 

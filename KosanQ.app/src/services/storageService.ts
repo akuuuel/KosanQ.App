@@ -42,6 +42,12 @@ export const compressAndResizeImage = async (uri: string): Promise<string> => {
  * alur penyimpanan kost tidak berhenti.
  */
 export const uploadImage = async (uri: string, path: string): Promise<string> => {
+  // Pastikan variabel environment tersedia
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+    console.error('Cloudinary configuration is missing! Check your .env file or build settings.');
+    throw new Error('Konfigurasi server gambar belum diatur.');
+  }
+
   // Jika URI sudah berupa URL remote (sudah diupload sebelumnya), skip upload
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
     return uri;
@@ -56,34 +62,30 @@ export const uploadImage = async (uri: string, path: string): Promise<string> =>
       type: 'image/jpeg',
       name: `upload_${Date.now()}.jpg`,
     } as any);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET || '');
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', path);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       body: formData,
-      // Jangan set Content-Type manual untuk multipart/form-data —
-      // browser/fetch otomatis mengisi boundary yang benar
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-
-      throw new Error(`Upload gagal dengan status ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Cloudinary Upload Error Details:', errorData);
+      throw new Error(errorData.error?.message || `Upload gagal dengan status ${response.status}`);
     }
 
     const data = await response.json();
 
     if (data.secure_url) {
-
       return data.secure_url;
     } else {
-      throw new Error(data.error?.message || 'Cloudinary tidak mengembalikan URL');
+      throw new Error('Server tidak mengembalikan link gambar.');
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error uploading to Cloudinary:', error);
-    // Kembalikan URI lokal sebagai fallback agar data kost tetap bisa disimpan
-    console.warn('Menggunakan URI lokal sebagai fallback:', uri);
-    return uri;
+    // Sekarang kita melempar error agar proses di UI berhenti dan user tahu ada masalah
+    throw new Error(error.message || 'Gagal mengunggah gambar. Periksa koneksi internet Anda.');
   }
 };

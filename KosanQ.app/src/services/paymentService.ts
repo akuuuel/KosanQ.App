@@ -9,6 +9,8 @@ export const listenPaymentsByKost = (kostId: string, callback: (payments: Paymen
   return onSnapshot(q, (snapshot) => {
     const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
     callback(payments);
+  }, (error) => {
+    console.error("[PaymentService] listenPaymentsByKost error:", error);
   });
 };
 
@@ -69,10 +71,54 @@ export const approvePayment = async (paymentId: string, historyId: string, month
   await awardPoints(userId, 50);
 };
 
+export const rejectPayment = async (paymentId: string, historyId: string, currentHistory: any[], reason: string) => {
+  const paymentRef = doc(db, PAYMENTS_COLLECTION, paymentId);
+  
+  const updatedHistory = currentHistory.map(h => 
+    h.id === historyId ? { ...h, status: 'rejected' as const, note: reason } : h
+  );
+
+  await updateDoc(paymentRef, {
+    history: updatedHistory,
+    updatedAt: new Date().toISOString()
+  });
+};
+
 export const uploadPaymentProof = async (paymentId: string, imageUrl: string) => {
   const paymentRef = doc(db, PAYMENTS_COLLECTION, paymentId);
   await updateDoc(paymentRef, {
     proofImages: arrayUnion(imageUrl),
     updatedAt: new Date().toISOString()
   });
+};
+
+export const calculateOwnerRevenue = async (ownerId: string) => {
+  // 1. Get all kosts by owner
+  const kostsRef = collection(db, 'kosts');
+  const kostsQ = query(kostsRef, where('ownerId', '==', ownerId));
+  const kostsSnap = await getDocs(kostsQ);
+  const kostIds = kostsSnap.docs.map(d => d.id);
+
+  if (kostIds.length === 0) return 0;
+
+  // 2. Get all payments for these kosts
+  // Note: Firestore 'in' query supports up to 10 items
+  // For production with many kosts, we may need a different approach
+  const paymentsRef = collection(db, PAYMENTS_COLLECTION);
+  const paymentsQ = query(paymentsRef, where('kostId', 'in', kostIds.slice(0, 10)));
+  const paymentsSnap = await getDocs(paymentsQ);
+
+  let total = 0;
+  paymentsSnap.docs.forEach(doc => {
+    const data = doc.data() as Payment;
+    if (data.history) {
+      data.history.forEach(h => {
+        if (h.status === 'approved') {
+          total += h.amount;
+        }
+      });
+    }
+  });
+
+  return total;
 };

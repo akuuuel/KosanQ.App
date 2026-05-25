@@ -14,7 +14,7 @@ interface CustomAlertProps {
   visible: boolean;
   title: string;
   message: string;
-  type?: 'success' | 'error' | 'warning' | 'info';
+  type?: 'success' | 'error' | 'warning' | 'info' | 'logout' | 'delete';
   onClose: () => void;
   onConfirm?: () => void;
   confirmText?: string;
@@ -57,16 +57,18 @@ export const CustomAlert = ({
     }
   }, [visible]);
 
-  const getIcon = () => {
+  const getTheme = () => {
     switch (type) {
-      case 'success': return { name: 'check-circle', color: '#00AA13' };
-      case 'error': return { name: 'times-circle', color: '#EE2737' };
-      case 'warning': return { name: 'exclamation-circle', color: '#F59E0B' };
-      default: return { name: 'info-circle', color: '#00AA13' };
+      case 'success': return { icon: 'check', color: '#00AA13', bg: '#E6F6E8', light: '#F0FDF4' };
+      case 'error': return { icon: 'times', color: '#EE2737', bg: '#FEE2E2', light: '#FEF2F2' };
+      case 'warning': return { icon: 'exclamation', color: '#F59E0B', bg: '#FEF3C7', light: '#FFFBEB' };
+      case 'logout': return { icon: 'sign-out-alt', color: '#EE2737', bg: '#FEE2E2', light: '#FEF2F2' };
+      case 'delete': return { icon: 'trash', color: '#EE2737', bg: '#FEE2E2', light: '#FEF2F2' };
+      default: return { icon: 'info', color: '#0B63F6', bg: '#E0E8F9', light: '#EFF4FF' };
     }
   };
 
-  const iconData = getIcon();
+  const theme = getTheme();
 
   return (
     <Modal
@@ -81,29 +83,43 @@ export const CustomAlert = ({
             styles.alertBox, 
             { 
               opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }]
+              transform: [{ scale: scaleAnim }, { translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]
             }
           ]}
         >
-          <View style={styles.iconContainer}>
-            <FontAwesome5 name={iconData.name} size={50} color={iconData.color} />
+          {/* Header Theme Line */}
+          <View style={[styles.headerLine, { backgroundColor: theme.color }]} />
+
+          {/* Floating Icon Wrapper */}
+          <View style={[styles.iconWrapper, { backgroundColor: theme.light }]}>
+            <View style={[styles.iconInner, { backgroundColor: theme.bg }]}>
+              <FontAwesome5 name={theme.icon} size={32} color={theme.color} />
+            </View>
           </View>
           
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          <View style={styles.contentContainer}>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.message}>{message}</Text>
+          </View>
 
           <View style={styles.buttonContainer}>
             {onConfirm && (
               <TouchableOpacity 
                 style={[styles.button, styles.cancelButton]} 
                 onPress={onClose}
+                activeOpacity={0.7}
               >
                 <Text style={styles.cancelButtonText}>{cancelText}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity 
-              style={[styles.button, styles.confirmButton]} 
+              style={[
+                styles.button, 
+                styles.confirmButton,
+                { backgroundColor: theme.color }
+              ]} 
               onPress={onConfirm || onClose}
+              activeOpacity={0.8}
             >
               <Text style={styles.confirmButtonText}>{confirmText}</Text>
             </TouchableOpacity>
@@ -117,57 +133,92 @@ export const CustomAlert = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)', // Slate-900 with nice opacity
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   alertBox: {
     width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
+    maxWidth: 380,
+    backgroundColor: '#ffffff',
+    borderRadius: 32,
     alignItems: 'center',
-    elevation: 20,
+    elevation: 30,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 15 },
+    shadowOpacity: 0.15,
+    shadowRadius: 30,
+    position: 'relative',
+    marginTop: 40, // Space for floating icon
   },
-  iconContainer: {
-    marginBottom: 16,
+  headerLine: {
+    height: 8,
+    width: '100%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    position: 'absolute',
+    top: 0,
+  },
+  iconWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
+    top: -45,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+  },
+  iconInner: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contentContainer: {
+    marginTop: 64, // Push content down below floating icon
+    paddingHorizontal: 24,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1C1C1C',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   message: {
     fontSize: 15,
-    color: '#4A4A4A',
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: 32,
   },
   buttonContainer: {
     flexDirection: 'row',
     width: '100%',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
     gap: 12,
   },
   button: {
     flex: 1,
-    height: 50,
-    borderRadius: 25,
+    height: 52,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   confirmButton: {
-    backgroundColor: '#00AA13',
+    // Dynamic bg color
   },
   confirmButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -175,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
   },
   cancelButtonText: {
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: 'bold',
     fontSize: 16,
   },

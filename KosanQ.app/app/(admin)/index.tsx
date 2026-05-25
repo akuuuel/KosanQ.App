@@ -1,7 +1,7 @@
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import * as Firestore from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../../src/services/firebase";
+import { CustomAlert } from "../../src/components/CustomAlert";
+import { SkeletonLoader } from "../../src/components/SkeletonLoader";
 
 export default function AdminDashboardIndex() {
   const [stats, setStats] = useState({
@@ -24,30 +26,46 @@ export default function AdminDashboardIndex() {
     revenue: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [alertVisible, setAlertVisible] = useState(false);
   const router = useRouter();
 
+  const handleLogout = () => {
+    setAlertVisible(true);
+  };
+
   useEffect(() => {
+    // Initial fetch for everything
     fetchStats();
+
+    // Set up real-time listener for pending kosts (for the alert banner)
+    const qPending = Firestore.query(Firestore.collection(db, "kosts"), Firestore.where("status", "==", "pending"));
+    const unsubPending = Firestore.onSnapshot(qPending, (snapshot) => {
+      setStats(prev => ({ ...prev, pendingKosts: snapshot.size }));
+    });
+
+    const unsubAllKosts = Firestore.onSnapshot(Firestore.collection(db, "kosts"), (snapshot) => {
+      setStats(prev => ({ ...prev, kosts: snapshot.size }));
+    });
+
+    return () => {
+      unsubPending();
+      unsubAllKosts();
+    };
   }, []);
 
   const fetchStats = async () => {
-    setLoading(true);
+    // Keep loading for the initial heavy fetch
     try {
-      const [usersSnap, kostsSnap, pendingSnap, bookingsSnap] =
+      const [usersSnap, bookingsSnap] =
         await Promise.all([
-          getDocs(collection(db, "users")),
-          getDocs(collection(db, "kosts")),
-          getDocs(
-            query(collection(db, "kosts"), where("status", "==", "pending")),
-          ),
-          getDocs(collection(db, "bookings")),
+          Firestore.getDocs(Firestore.collection(db, "users")),
+          Firestore.getDocs(Firestore.collection(db, "bookings")),
         ]);
 
       const allUsers = usersSnap.docs.map((d) => d.data());
       const ownersCount = allUsers.filter((u: any) => u.role === "owner").length;
       const normalUsersCount = allUsers.filter((u: any) => u.role === "user").length;
 
-      // Calculate total revenue from successful bookings
       const totalRevenue = bookingsSnap.docs.reduce((acc, doc) => {
         const data = doc.data();
         if (data.status === 'completed') {
@@ -56,14 +74,13 @@ export default function AdminDashboardIndex() {
         return acc;
       }, 0);
 
-      setStats({
+      setStats(prev => ({
+        ...prev,
         users: normalUsersCount,
         owners: ownersCount,
-        kosts: kostsSnap.size,
-        pendingKosts: pendingSnap.size,
         bookings: bookingsSnap.size,
         revenue: totalRevenue,
-      });
+      }));
     } catch (error) {
       console.error(error);
     } finally {
@@ -92,11 +109,11 @@ export default function AdminDashboardIndex() {
       <StatusBar barStyle="light-content" backgroundColor="#00AA13" />
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Super Admin</Text>
+          <Text style={styles.title}>Admin Panel</Text>
           <Text style={styles.subtitle}>Ringkasan Ekosistem KosanQ</Text>
         </View>
         <TouchableOpacity
-          onPress={() => signOut(auth)}
+          onPress={handleLogout}
           style={styles.logoutBtn}
         >
           <FontAwesome5 name="power-off" size={18} color="#fff" />
@@ -105,11 +122,21 @@ export default function AdminDashboardIndex() {
 
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator
-            size="large"
-            color="#00AA13"
-            style={{ marginTop: 40 }}
-          />
+          <View style={{ gap: 16 }}>
+            <View style={styles.statGrid}>
+              <View style={styles.statCard}><SkeletonLoader width="100%" height={60} borderRadius={20} /></View>
+              <View style={styles.statCard}><SkeletonLoader width="100%" height={60} borderRadius={20} /></View>
+              <View style={styles.statCard}><SkeletonLoader width="100%" height={60} borderRadius={20} /></View>
+              <View style={styles.statCard}><SkeletonLoader width="100%" height={60} borderRadius={20} /></View>
+            </View>
+            <SkeletonLoader width="100%" height={100} borderRadius={24} />
+            <View style={{ height: 20 }} />
+            <View style={styles.quickActions}>
+               <View style={styles.actionItem}><SkeletonLoader width={60} height={60} borderRadius={20} /></View>
+               <View style={styles.actionItem}><SkeletonLoader width={60} height={60} borderRadius={20} /></View>
+               <View style={styles.actionItem}><SkeletonLoader width={60} height={60} borderRadius={20} /></View>
+            </View>
+          </View>
         ) : (
           <>
             <View style={styles.statGrid}>
@@ -209,6 +236,20 @@ export default function AdminDashboardIndex() {
         )}
       </View>
       <View style={{ height: 100 }} />
+      
+      <CustomAlert 
+        visible={alertVisible}
+        title="Konfirmasi Keluar"
+        message="Apakah Anda yakin ingin keluar dari Admin Panel?"
+        type="logout"
+        confirmText="Keluar"
+        cancelText="Batal"
+        onClose={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          signOut(auth);
+        }}
+      />
     </ScrollView>
   );
 }

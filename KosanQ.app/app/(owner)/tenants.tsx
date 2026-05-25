@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert, Image, ScrollView, Dimensions } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { getKostsByOwner } from '../../src/services/kostService';
+import { getApprovedOwnerKosts } from '../../src/services/kostService';
 import { getRoomsByKost } from '../../src/services/roomService';
 import { addTenant, listenTenantsByKost, deactivateTenant } from '../../src/services/tenantService';
 import { getUserByEmail, getUserProfile } from '../../src/services/userService';
@@ -39,7 +39,7 @@ export default function TenantManagementScreen() {
   }, [profile?.uid]);
 
   const fetchKosts = async () => {
-    const data = await getKostsByOwner(profile!.uid);
+    const data = await getApprovedOwnerKosts(profile!.uid);
     setKosts(data);
     if (data.length > 0) setSelectedKost(data[0]);
     setLoading(false);
@@ -58,7 +58,8 @@ export default function TenantManagementScreen() {
   const fetchAvailableRooms = async () => {
     if (!selectedKost) return;
     const allRooms = await getRoomsByKost(selectedKost.id);
-    setAvailableRooms(allRooms.filter(r => r.status === 'available'));
+    // Make filter case-insensitive to be safer
+    setAvailableRooms(allRooms.filter(r => r.status?.toLowerCase() === 'available'));
   };
 
   const openTenantDetail = async (tenant: Tenant) => {

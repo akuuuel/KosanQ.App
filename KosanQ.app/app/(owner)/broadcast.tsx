@@ -4,7 +4,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import { createBroadcast } from '../../src/services/broadcastService';
-import { getOwnerKosts } from '../../src/services/kostService';
+import { getApprovedOwnerKosts } from '../../src/services/kostService';
 import { Kost } from '../../src/types';
 import { CustomButton } from '../../src/components/CustomButton';
 
@@ -25,7 +25,7 @@ export default function OwnerBroadcastScreen() {
 
   const fetchKosts = async () => {
     try {
-      const data = await getOwnerKosts(profile!.uid);
+      const data = await getApprovedOwnerKosts(profile!.uid);
       setKosts(data);
       if (data.length > 0) {
         setSelectedKostId(data[0].id);

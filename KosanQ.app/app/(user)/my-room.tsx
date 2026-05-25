@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { compressAndResizeImage, uploadImage } from '../../src/services/storageService';
 import { CustomButton } from '../../src/components/CustomButton';
 import { CustomInput } from '../../src/components/CustomInput';
+import { CustomAlert } from '../../src/components/CustomAlert';
 
 const MONTHS = [
   { id: 'jan', label: 'Januari' }, { id: 'feb', label: 'Februari' }, { id: 'mar', label: 'Maret' },
@@ -30,11 +31,19 @@ export default function MyRoomScreen() {
   
   // Payment States
   const [showPayModal, setShowPayModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Transfer Bank');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState({ title: '', message: '', type: 'info' as any });
+
+  const showAlert = (title: string, message: string, type: any = 'info') => {
+    setAlertData({ title, message, type });
+    setAlertVisible(true);
+  };
 
   useEffect(() => {
     if (profile?.uid) fetchTenantData();
@@ -66,7 +75,7 @@ export default function MyRoomScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       quality: 0.7,
     });
@@ -75,7 +84,7 @@ export default function MyRoomScreen() {
 
   const handleSubmitPayment = async () => {
     if (!payment || !selectedMonth || !amount || !proofUri) {
-      Alert.alert('Peringatan', 'Harap isi semua data dan pilih bukti transfer.');
+      showAlert('Peringatan', 'Harap isi semua data dan pilih bukti transfer.', 'warning');
       return;
     }
 
@@ -93,12 +102,17 @@ export default function MyRoomScreen() {
         createdAt: Date.now()
       });
 
-      Alert.alert('Sukses', 'Laporan pembayaran Anda telah dikirim. Tunggu konfirmasi dari pemilik kost.');
       setShowPayModal(false);
       setProofUri(null);
       setAmount('');
+      setTimeout(() => {
+        setShowSuccessModal(true);
+      }, 400);
     } catch (e) {
-      Alert.alert('Error', 'Gagal mengirim laporan pembayaran.');
+      setShowPayModal(false);
+      setTimeout(() => {
+        showAlert('Error', 'Gagal mengirim laporan pembayaran.', 'error');
+      }, 400);
     } finally {
       setSubmitting(false);
     }
@@ -238,14 +252,25 @@ export default function MyRoomScreen() {
               <Text style={styles.cardTitle}>Riwayat Transaksi</Text>
               {payment?.history && payment.history.length > 0 ? (
                 payment.history.sort((a,b) => b.createdAt - a.createdAt).map((h) => (
-                  <View key={h.id} style={styles.historyItem}>
-                    <View style={styles.historyInfo}>
-                      <Text style={styles.historyMonth}>{MONTHS.find(m => m.id === h.month)?.label}</Text>
-                      <Text style={styles.historyDate}>{new Date(h.createdAt).toLocaleDateString('id-ID')}</Text>
+                  <View key={h.id} style={styles.historyItemWrapper}>
+                    <View style={styles.historyItemRow}>
+                      <View style={styles.historyInfo}>
+                        <Text style={styles.historyMonth}>{MONTHS.find(m => m.id === h.month)?.label}</Text>
+                        <Text style={styles.historyDate}>{new Date(h.createdAt).toLocaleDateString('id-ID')}</Text>
+                      </View>
+                      <View style={[styles.statusBadge, h.status === 'approved' ? styles.statusApproved : h.status === 'pending' ? styles.statusPending : styles.statusRejected]}>
+                        <Text style={[styles.statusText, h.status === 'approved' ? {color: '#00AA13'} : h.status === 'pending' ? {color: '#F59E0B'} : {color: '#EE2737'}]}>
+                          {h.status === 'approved' ? 'Lunas' : h.status === 'pending' ? 'Menunggu' : 'Ditolak'}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={[styles.statusBadge, h.status === 'approved' ? styles.statusApproved : h.status === 'pending' ? styles.statusPending : styles.statusRejected]}>
-                      <Text style={styles.statusText}>{h.status === 'approved' ? 'Lunas' : h.status === 'pending' ? 'Menunggu' : 'Ditolak'}</Text>
-                    </View>
+                    
+                    {h.status === 'rejected' && h.note && (
+                      <View style={styles.rejectNoteContainer}>
+                        <FontAwesome5 name="info-circle" size={14} color="#EE2737" />
+                        <Text style={styles.rejectNoteText}>Alasan ditolak: {h.note}</Text>
+                      </View>
+                    )}
                   </View>
                 ))
               ) : (
@@ -311,6 +336,50 @@ export default function MyRoomScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* DEDICATED SUCCESS MODAL */}
+      <Modal visible={showSuccessModal} transparent animationType="fade">
+        <View style={styles.successOverlay}>
+          <View style={styles.successCard}>
+            <View style={styles.successIconTop}>
+              <View style={styles.successIconInner}>
+                <FontAwesome5 name="check" size={40} color="#fff" />
+              </View>
+            </View>
+            <Text style={styles.successTitle}>Hore! Terkirim 🎉</Text>
+            <Text style={styles.successMessage}>Laporan pembayaran Anda untuk bulan <Text style={{fontWeight: 'bold', color: '#1C1C1C'}}>{MONTHS.find(m => m.id === selectedMonth)?.label}</Text> berhasil dikirim.</Text>
+            
+            <View style={styles.successInfoBox}>
+              <View style={styles.successInfoRow}>
+                <Text style={styles.successInfoLabel}>Nominal:</Text>
+                <Text style={styles.successInfoVal}>Rp {parseInt(amount || '0').toLocaleString('id-ID')}</Text>
+              </View>
+              <View style={styles.successInfoRowLine} />
+              <View style={styles.successInfoRow}>
+                <Text style={styles.successInfoLabel}>Metode:</Text>
+                <Text style={styles.successInfoVal}>{method}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.successWaitText}>Pemilik kost akan segera meninjau laporan Anda.</Text>
+            
+            <TouchableOpacity 
+              style={styles.successBtn} 
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={styles.successBtnText}>Kembali ke Kamar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <CustomAlert 
+        visible={alertVisible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        onClose={() => setAlertVisible(false)}
+      />
     </View>
   );
 }
@@ -352,7 +421,10 @@ const styles = StyleSheet.create({
   monthTextActive: { color: '#1C1C1C' },
   hintText: { fontSize: 11, color: '#94a3b8', marginTop: 12, fontStyle: 'italic' },
   
-  historyItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  historyItemWrapper: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  historyItemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  rejectNoteContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 10, borderRadius: 8, marginTop: 10, gap: 8, borderWidth: 1, borderColor: '#FEE2E2' },
+  rejectNoteText: { color: '#EE2737', fontSize: 12, lineHeight: 18, flex: 1 },
   historyInfo: { flex: 1 },
   historyMonth: { fontSize: 14, fontWeight: 'bold', color: '#1C1C1C' },
   historyDate: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
@@ -382,5 +454,21 @@ const styles = StyleSheet.create({
 
   emptyText: { fontSize: 18, fontWeight: 'bold', color: '#1C1C1C', marginTop: 20, textAlign: 'center' },
   emptySubtext: { fontSize: 14, color: '#64748b', marginTop: 8, textAlign: 'center' },
-  emptySub: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic' }
+  emptySub: { fontSize: 13, color: '#94a3b8', fontStyle: 'italic' },
+
+  // Success Modal Styles
+  successOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  successCard: { width: '100%', backgroundColor: '#fff', borderRadius: 32, padding: 24, paddingTop: 60, alignItems: 'center', position: 'relative' },
+  successIconTop: { position: 'absolute', top: -50, width: 100, height: 100, backgroundColor: '#E6F6E8', borderRadius: 50, justifyContent: 'center', alignItems: 'center', borderWidth: 6, borderColor: '#fff' },
+  successIconInner: { width: 70, height: 70, backgroundColor: '#00AA13', borderRadius: 35, justifyContent: 'center', alignItems: 'center', shadowColor: '#00AA13', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 15, elevation: 10 },
+  successTitle: { fontSize: 24, fontWeight: '900', color: '#1C1C1C', marginBottom: 16, textAlign: 'center' },
+  successMessage: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 24, marginBottom: 24, paddingHorizontal: 10 },
+  successInfoBox: { width: '100%', backgroundColor: '#F8FAFC', borderRadius: 20, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' },
+  successInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  successInfoRowLine: { height: 1, backgroundColor: '#E2E8F0', borderStyle: 'dashed', marginVertical: 12 },
+  successInfoLabel: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+  successInfoVal: { fontSize: 15, color: '#1C1C1C', fontWeight: 'bold' },
+  successWaitText: { fontSize: 13, color: '#00AA13', backgroundColor: '#E6F6E8', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, fontWeight: '600', marginBottom: 32 },
+  successBtn: { width: '100%', backgroundColor: '#00AA13', paddingVertical: 18, borderRadius: 20, alignItems: 'center', shadowColor: '#00AA13', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8 },
+  successBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
 });

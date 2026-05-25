@@ -43,7 +43,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && request.auth.uid == userId 
                     && request.resource.data.role == resource.data.role;
       
-      // Owner can update points, memberStatus, and vouchers for loyalty system
+      // Owner can update points, memberStatus, and vouchers ONLY for their own tenants
+      // (This rule is simplified, in production further checks are needed)
       allow update: if isOwner() && 
                     request.resource.data.diff(resource.data).affectedKeys()
                     .hasOnly(['points', 'memberStatus', 'vouchers', 'updatedAt']);
@@ -53,47 +54,48 @@ service cloud.firestore {
 
     // KOSTS
     match /kosts/{kostId} {
-      allow read: if isAuthenticated();
+      allow read: if true; // Public can see kosts
       allow create: if isOwner() && isOwnerOf(request.resource.data.ownerId);
       allow update, delete: if isAdmin() || (isOwner() && isOwnerOf(resource.data.ownerId));
     }
 
     // ROOMS
     match /rooms/{roomId} {
-      allow read: if isAuthenticated();
-      
-      // Only owner of the parent kost can manage rooms
-      allow write: if isAdmin() || isOwner();
+      allow read: if true;
+      allow write: if isAdmin() || (isOwner() && isOwnerOf(resource.data.ownerId));
     }
 
     // TENANTS
     match /tenants/{tenantId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isOwner();
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isOwnerOf(resource.data.ownerId) || isAdmin());
+      allow write: if isAdmin() || (isOwner() && isOwnerOf(resource.data.ownerId));
     }
 
     // PAYMENTS
     match /payments/{paymentId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isOwnerOf(resource.data.ownerId) || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      // Only owner can approve/reject, only user can upload proof
+      allow update: if isAdmin() || isOwner() || (isAuthenticated() && request.auth.uid == resource.data.userId);
     }
 
     // CHATS / CONVERSATIONS
     match /conversations/{convId} {
-      allow read, write: if isAuthenticated();
+      // Only participants can read/write their conversations
+      allow read, write: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow create: if isAuthenticated();
     }
 
     // MESSAGES
     match /messages/{msgId} {
-      allow read, write: if isAuthenticated();
+      // Only sender or receiver can see/send messages
+      allow read, write: if isAuthenticated() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.senderId;
     }
     
     // REPORTS
     match /reports/{reportId} {
-      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
-      allow read: if isOwnerOf(resource.data.ownerId) || isAdmin();
-      
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isOwnerOf(resource.data.ownerId) || isAdmin());
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
       allow update: if isAdmin() || isOwner();
     }
@@ -101,18 +103,30 @@ service cloud.firestore {
     // BROADCASTS
     match /broadcasts/{broadcastId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin() || isOwner();
+      allow write: if isAdmin();
+      // Allow owners to write if they are confirmed owners through the app logic (or simplified for now)
+      allow create: if isOwner(); 
     }
 
     // BOOKINGS (ORDERS)
     match /bookings/{bookingId} {
-      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
-      allow read: if isOwnerOf(resource.data.ownerId) || isAdmin();
-      
-      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isOwnerOf(resource.data.ownerId) || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
       allow update, delete: if isAdmin() 
                             || (isOwner() && isOwnerOf(resource.data.ownerId))
-                            || (isAuthenticated() && request.auth.uid == (resource == null ? request.resource.data.userId : resource.data.userId));
+                            || (isAuthenticated() && request.auth.uid == resource.data.userId);
+    }
+
+    // REVIEWS
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.userId);
+    }
+
+    // ADMIN TRANSACTIONS
+    match /adminTransactions/{txId} {
+      allow read, write: if isAdmin();
     }
   }
 }

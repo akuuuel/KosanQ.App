@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Modal, Image } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { getKostsByOwner } from '../../src/services/kostService';
+import { getApprovedOwnerKosts } from '../../src/services/kostService';
 import { listenTenantsByKost } from '../../src/services/tenantService';
-import { listenPaymentsByKost, updatePaymentStatus, approvePayment } from '../../src/services/paymentService';
+import { listenPaymentsByKost, updatePaymentStatus, approvePayment, rejectPayment } from '../../src/services/paymentService';
 import { Tenant, Kost, Payment, MonthlyStatus, PaymentHistory } from '../../src/types';
+import { CustomInput } from '../../src/components/CustomInput';
+import { CustomAlert } from '../../src/components/CustomAlert';
 
 const MONTHS = [
   { id: 'jan', label: 'Jan' }, { id: 'feb', label: 'Feb' }, { id: 'mar', label: 'Mar' },
@@ -25,13 +27,24 @@ export default function PaymentManagementScreen() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  
+  const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState<{ title: string; message: string; type: any; onConfirm?: () => void }>({
+    title: '', message: '', type: 'info'
+  });
+
+  const showAlert = (title: string, message: string, type: any = 'info', onConfirm?: () => void) => {
+    setAlertData({ title, message, type, onConfirm });
+    setAlertVisible(true);
+  };
 
   useEffect(() => {
     if (profile?.uid) fetchKosts();
   }, [profile?.uid]);
 
   const fetchKosts = async () => {
-    const data = await getKostsByOwner(profile!.uid);
+    const data = await getApprovedOwnerKosts(profile!.uid);
     setKosts(data);
     if (data.length > 0) setSelectedKost(data[0]);
     setLoading(false);
@@ -48,11 +61,10 @@ export default function PaymentManagementScreen() {
     }
   }, [selectedKost]);
 
-  const handleApprove = async (historyId: string, month: string) => {
+  const confirmApprove = async (historyId: string, month: string) => {
     if (!selectedPayment) return;
     try {
       await approvePayment(selectedPayment.id, historyId, month, selectedPayment.history || [], selectedPayment.userId);
-      // Local update to modal state
       const updatedHistory = (selectedPayment.history || []).map(h => 
         h.id === historyId ? { ...h, status: 'approved' as const } : h
       );
@@ -61,9 +73,40 @@ export default function PaymentManagementScreen() {
         history: updatedHistory,
         monthlyStatus: { ...selectedPayment.monthlyStatus, [month]: true }
       });
-      Alert.alert('Sukses', 'Pembayaran telah disetujui.');
+      showAlert('Sukses', 'Pembayaran telah disetujui.', 'success');
     } catch (e) {
-      Alert.alert('Error', 'Gagal menyetujui pembayaran');
+      showAlert('Error', 'Gagal menyetujui pembayaran', 'error');
+    }
+  };
+
+  const handleApprove = (historyId: string, month: string, tenantName: string) => {
+    showAlert(
+      'Konfirmasi ACC',
+      `Anda yakin ingin menyetujui laporan pembayaran bulan ${month} dari ${tenantName}?`,
+      'warning',
+      () => confirmApprove(historyId, month)
+    );
+  };
+
+  const handleReject = async (historyId: string, reason: string) => {
+    if (!selectedPayment) return;
+    if (!reason.trim()) {
+      showAlert('Peringatan', 'Harap isi catatan penolakan.', 'warning');
+      return;
+    }
+    try {
+      await rejectPayment(selectedPayment.id, historyId, selectedPayment.history || [], reason);
+      const updatedHistory = (selectedPayment.history || []).map(h => 
+        h.id === historyId ? { ...h, status: 'rejected' as const, note: reason } : h
+      );
+      setSelectedPayment({
+        ...selectedPayment,
+        history: updatedHistory
+      });
+      showAlert('Sukses', 'Pembayaran telah ditolak.', 'success');
+      setRejectNotes(prev => ({...prev, [historyId]: ''}));
+    } catch (e) {
+      showAlert('Error', 'Gagal menolak pembayaran', 'error');
     }
   };
 
@@ -245,13 +288,30 @@ export default function PaymentManagementScreen() {
                     )}
 
                     {log.status === 'pending' && (
-                      <TouchableOpacity 
-                        style={styles.accBtn}
-                        onPress={() => handleApprove(log.id, log.month)}
-                      >
-                        <FontAwesome5 name="check" size={14} color="#fff" />
-                        <Text style={styles.accBtnText}>Konfirmasi Pembayaran (ACC)</Text>
-                      </TouchableOpacity>
+                      <View style={{ marginTop: 12 }}>
+                        <CustomInput 
+                          label="Catatan / Alasan Penolakan" 
+                          placeholder="Misl: Nominal kurang, gambar buram"
+                          value={rejectNotes[log.id] || ''}
+                          onChangeText={(val) => setRejectNotes(prev => ({...prev, [log.id]: val}))}
+                        />
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity 
+                            style={[styles.actionBtn, styles.accBtnStyle]}
+                            onPress={() => handleApprove(log.id, log.month, selectedTenant?.userName || 'penghuni')}
+                          >
+                            <FontAwesome5 name="check" size={14} color="#fff" />
+                            <Text style={styles.actionBtnText}>Terima</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={[styles.actionBtn, styles.rejectBtnStyle]}
+                            onPress={() => handleReject(log.id, rejectNotes[log.id] || '')}
+                          >
+                            <FontAwesome5 name="times" size={14} color="#fff" />
+                            <Text style={styles.actionBtnText}>Tolak</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
                     )}
                   </View>
                 ))
@@ -281,6 +341,17 @@ export default function PaymentManagementScreen() {
           )}
         </View>
       </Modal>
+
+      <CustomAlert 
+        visible={alertVisible}
+        title={alertData.title}
+        message={alertData.message}
+        type={alertData.type}
+        onClose={() => setAlertVisible(false)}
+        onConfirm={alertData.onConfirm}
+        confirmText={alertData.onConfirm ? 'Ya, ACC' : 'OK'}
+        cancelText="Batal"
+      />
     </View>
   );
 }
@@ -341,8 +412,11 @@ const styles = StyleSheet.create({
   proofLabel: { fontSize: 13, fontWeight: '600', color: '#64748b', marginBottom: 8 },
   proofImgDetail: { width: '100%', height: 200, borderRadius: 12, backgroundColor: '#F1F5F9' },
   
-  accBtn: { backgroundColor: '#00AA13', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, gap: 10 },
-  accBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  actionButtons: { flexDirection: 'row', gap: 12, marginTop: 8 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, gap: 8 },
+  accBtnStyle: { backgroundColor: '#00AA13' },
+  rejectBtnStyle: { backgroundColor: '#EE2737' },
+  actionBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   
   emptyHistory: { padding: 32, alignItems: 'center' },
   emptyHistoryText: { color: '#94a3b8', fontSize: 14 },

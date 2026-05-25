@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Image, Modal, TextInput, Platform, ScrollView } from 'react-native';
-import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../../src/services/firebase';
 import { Kost } from '../../src/types';
 import { signOut } from 'firebase/auth';
@@ -8,6 +8,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { CustomAlert } from '../../src/components/CustomAlert';
 import { sendMessage } from '../../src/services/chatService';
 import { getKostById } from '../../src/services/kostService';
+import { SkeletonLoader } from '../../src/components/SkeletonLoader';
 
 export default function AdminVerificationScreen() {
   const [pendingKosts, setPendingKosts] = useState<Kost[]>([]);
@@ -20,11 +21,34 @@ export default function AdminVerificationScreen() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [selectedKostId, setSelectedKostId] = useState<string | null>(null);
   const [selectedKost, setSelectedKost] = useState<Kost | null>(null);
+  const [ownerData, setOwnerData] = useState<any>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [loadingOwner, setLoadingOwner] = useState(false);
+  const [showOwnerDocs, setShowOwnerDocs] = useState(false);
 
   useEffect(() => {
-    fetchPendingKosts();
+    // Set up real-time listener for pending kosts
+    setLoading(true);
+    const q = query(collection(db, 'kosts'), where('status', '==', 'pending'));
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        // Normalize createdAt from Firebase Timestamp to millis
+        const createdAt = d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt || 0);
+        return { id: doc.id, ...d, createdAt } as Kost;
+      });
+      
+      // Sort in-memory by newest first
+      setPendingKosts(data.sort((a, b) => b.createdAt - a.createdAt));
+      setLoading(false);
+    }, (error) => {
+      console.error('[Admin Verification] Listener error:', error);
+      setLoading(false);
+    });
+
+    return () => unsub();
   }, []);
 
   const showAlert = (title: string, message: string, type: any = 'info', onConfirm?: () => void) => {
@@ -32,18 +56,9 @@ export default function AdminVerificationScreen() {
     setAlertVisible(true);
   };
 
-  const fetchPendingKosts = async () => {
-    setLoading(true);
-    try {
-      const q = query(collection(db, 'kosts'), where('status', '==', 'pending'));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Kost));
-      setPendingKosts(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+  const fetchPendingKosts = () => {
+    // This is now redundant but kept for the flatlist onRefresh compatibility
+    // The listener handles the updates
   };
 
   const handleAction = (id: string, status: 'approved' | 'rejected') => {
@@ -118,13 +133,32 @@ export default function AdminVerificationScreen() {
     }
   };
 
+  const fetchOwnerData = async (ownerId: string) => {
+    setLoadingOwner(true);
+    setOwnerData(null);
+    try {
+      const userRef = doc(db, 'users', ownerId);
+      const userSnap = await getDocs(query(collection(db, 'users'), where('uid', '==', ownerId)));
+      if (!userSnap.empty) {
+        setOwnerData(userSnap.docs[0].data());
+      }
+    } catch (error) {
+      console.error('Error fetching owner data:', error);
+    } finally {
+      setLoadingOwner(false);
+    }
+  };
+
+  const handleOpenDetail = async (kost: Kost) => {
+    setSelectedKost(kost);
+    setDetailVisible(true);
+    await fetchOwnerData(kost.ownerId);
+  };
+
   const renderItem = ({ item }: { item: Kost }) => (
     <TouchableOpacity 
       style={styles.card} 
-      onPress={() => {
-        setSelectedKost(item);
-        setDetailVisible(true);
-      }}
+      onPress={() => handleOpenDetail(item)}
     >
       <Image source={{ uri: item.images[0] }} style={styles.cardImg} />
       <View style={styles.cardInfo}>
@@ -167,8 +201,19 @@ export default function AdminVerificationScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00AA13" />
+        <View style={{ padding: 20 }}>
+          {[1, 2, 3, 4].map(i => (
+            <View key={i} style={[styles.card, { padding: 12, gap: 10 }]}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <SkeletonLoader width={70} height={70} borderRadius={12} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <SkeletonLoader width="80%" height={15} />
+                  <SkeletonLoader width="100%" height={12} />
+                  <SkeletonLoader width="60%" height={12} />
+                </View>
+              </View>
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList
@@ -276,6 +321,107 @@ export default function AdminVerificationScreen() {
 
                     <Text style={styles.detailSectionTitle}>Deskripsi</Text>
                     <Text style={styles.descriptionText}>{selectedKost.description}</Text>
+
+                    <Text style={styles.detailSectionTitle}>Biodata Pemilik</Text>
+                    {loadingOwner ? (
+                      <ActivityIndicator size="small" color="#00AA13" />
+                    ) : ownerData ? (
+                      <View style={styles.ownerCardContainer}>
+                        {/* Ringkasan — selalu tampil */}
+                        <TouchableOpacity
+                          style={styles.ownerCard}
+                          onPress={() => setShowOwnerDocs(v => !v)}
+                          activeOpacity={0.8}
+                        >
+                          <Image
+                            source={{ uri: ownerData.photoURL || 'https://via.placeholder.com/100' }}
+                            style={styles.ownerPhoto}
+                          />
+                          <View style={styles.ownerInfo}>
+                            <Text style={styles.ownerName}>{ownerData.name || 'Tanpa Nama'}</Text>
+                            <Text style={styles.ownerEmail}>{ownerData.email}</Text>
+                            {ownerData.whatsapp && (
+                              <View style={styles.ownerContact}>
+                                <FontAwesome5 name="whatsapp" size={14} color="#25D366" />
+                                <Text style={styles.ownerWhatsapp}>{ownerData.whatsapp}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.docsToggleBtn}>
+                            <FontAwesome5
+                              name={showOwnerDocs ? 'chevron-up' : 'chevron-down'}
+                              size={12}
+                              color="#64748b"
+                            />
+                            <Text style={styles.docsToggleText}>
+                              {showOwnerDocs ? 'Sembunyikan' : 'Lihat Dokumen'}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+
+                        {/* Dokumen Pendukung — muncul saat diklik */}
+                        {showOwnerDocs && (
+                          <View style={styles.docsSection}>
+                            {ownerData.npwp && (
+                              <View style={styles.docRow}>
+                                <FontAwesome5 name="file-alt" size={14} color="#64748b" />
+                                <View style={{ marginLeft: 10 }}>
+                                  <Text style={styles.docLabel}>NPWP</Text>
+                                  <Text style={styles.docValue}>{ownerData.npwp}</Text>
+                                </View>
+                              </View>
+                            )}
+                            {ownerData.address && (
+                              <View style={styles.docRow}>
+                                <FontAwesome5 name="map-marker-alt" size={14} color="#64748b" />
+                                <View style={{ marginLeft: 10, flex: 1 }}>
+                                  <Text style={styles.docLabel}>Alamat (KTP)</Text>
+                                  <Text style={styles.docValue}>{ownerData.address}</Text>
+                                </View>
+                              </View>
+                            )}
+                            {ownerData.bankName && (
+                              <View style={styles.docRow}>
+                                <FontAwesome5 name="university" size={14} color="#64748b" />
+                                <View style={{ marginLeft: 10 }}>
+                                  <Text style={styles.docLabel}>Rekening Bank</Text>
+                                  <Text style={styles.docValue}>{ownerData.bankName} • {ownerData.bankAccount}</Text>
+                                  <Text style={styles.docSub}>a.n. {ownerData.bankAccountName}</Text>
+                                </View>
+                              </View>
+                            )}
+                            {ownerData.ktpURL && (
+                              <View style={styles.ktpSection}>
+                                <Text style={styles.ktpLabel}>Foto KTP</Text>
+                                <Image
+                                  source={{ uri: ownerData.ktpURL }}
+                                  style={styles.ktpPreview}
+                                  resizeMode="contain"
+                                />
+                              </View>
+                            )}
+                            {ownerData.selfieKTPURL && (
+                              <View style={styles.ktpSection}>
+                                <Text style={styles.ktpLabel}>Selfie + KTP</Text>
+                                <Image
+                                  source={{ uri: ownerData.selfieKTPURL }}
+                                  style={styles.ktpPreview}
+                                  resizeMode="contain"
+                                />
+                              </View>
+                            )}
+                            {ownerData.bio && (
+                              <View style={styles.bioSection}>
+                                <Text style={styles.bioLabel}>Bio Pemilik</Text>
+                                <Text style={styles.ownerBio}>"{ownerData.bio}"</Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.errorText}>Data pemilik tidak ditemukan.</Text>
+                    )}
                   </View>
 
                   <View style={styles.detailFooter}>
@@ -406,5 +552,101 @@ const styles = StyleSheet.create({
   footerApprove: { backgroundColor: '#00AA13' },
   footerReject: { backgroundColor: '#EE2737' },
   footerBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  typeRow: { marginTop: 8 }
+  typeRow: { marginTop: 8 },
+  ownerCard: { 
+    flexDirection: 'row', 
+    backgroundColor: '#F8FAFC', 
+    padding: 16, 
+    borderRadius: 20, 
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  ownerPhoto: { width: 60, height: 60, borderRadius: 30, marginRight: 16 },
+  ownerInfo: { flex: 1 },
+  ownerName: { fontSize: 16, fontWeight: 'bold', color: '#1C1C1C' },
+  ownerEmail: { fontSize: 12, color: '#64748b', marginBottom: 4 },
+  ownerContact: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  ownerWhatsapp: { fontSize: 13, color: '#1C1C1C', fontWeight: '600' },
+  ownerBio: { fontSize: 12, color: '#64748b', fontStyle: 'italic' },
+  errorText: { fontSize: 12, color: '#EE2737', fontStyle: 'italic' },
+  ownerCardContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  docsToggleBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    gap: 8,
+  },
+  docsToggleText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#64748b',
+  },
+  docsSection: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  docRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  docLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    fontWeight: 'bold',
+  },
+  docValue: {
+    fontSize: 14,
+    color: '#1C1C1C',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  docSub: {
+    fontSize: 11,
+    color: '#64748b',
+    marginTop: 2,
+  },
+  ktpSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  ktpLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#64748b',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  ktpPreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  bioSection: {
+    marginTop: 12,
+  },
+  bioLabel: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#64748b',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
 });

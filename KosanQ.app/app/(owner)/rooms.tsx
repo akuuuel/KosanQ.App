@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
-import { getKostsByOwner } from '../../src/services/kostService';
+import { getApprovedOwnerKosts, getOwnerKosts } from '../../src/services/kostService';
 import { addRoom, listenRooms, updateRoom, deleteRoom } from '../../src/services/roomService';
 import { Room, Kost } from '../../src/types';
 import { CustomInput } from '../../src/components/CustomInput';
@@ -36,22 +36,40 @@ export default function RoomManagementScreen() {
   }, [profile?.uid]);
 
   const fetchKosts = async () => {
-    const data = await getKostsByOwner(profile!.uid);
-    setKosts(data);
-    if (data.length > 0) {
-      setSelectedKost(data[0]);
+    try {
+      const allKosts = await getOwnerKosts(profile!.uid);
+      setKosts(allKosts);
+      
+      if (allKosts.length > 0 && !selectedKost) {
+        setSelectedKost(allKosts[0]);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
-    if (selectedKost) {
-      const unsubscribe = listenRooms(selectedKost.id, (data) => {
-        setRooms(data.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber)));
-      });
-      return () => unsubscribe();
+    let unsubscribe: () => void = () => {};
+    
+    if (selectedKost?.id) {
+      setRooms([]);
+      // Adding try-catch inside listener or error callback
+      try {
+        unsubscribe = listenRooms(selectedKost.id, (data) => {
+          const sorted = data.sort((a, b) => {
+            return a.roomNumber.localeCompare(b.roomNumber, undefined, { numeric: true });
+          });
+          setRooms(sorted);
+        });
+      } catch (e) {
+        console.error('[Rooms] Listener failed:', e);
+      }
     }
-  }, [selectedKost]);
+    
+    return () => unsubscribe();
+  }, [selectedKost?.id]);
 
   const handleSave = async () => {
     if (!selectedKost) {
@@ -77,6 +95,7 @@ export default function RoomManagementScreen() {
       } else {
         await addRoom({
           kostId: selectedKost.id,
+          ownerId: profile!.uid, // Penting agar rules mengizinkan akses
           roomNumber,
           price: parseInt(price),
           status: 'available',
@@ -117,7 +136,7 @@ export default function RoomManagementScreen() {
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: 'images',
       allowsMultipleSelection: true,
       quality: 0.7,
     });

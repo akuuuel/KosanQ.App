@@ -14,6 +14,7 @@ import { useAuth } from '../../../src/context/AuthContext';
 import { getUserBookings, deleteBooking } from '../../../src/services/bookingService';
 import { Booking } from '../../../src/types';
 import { CustomAlert } from '../../../src/components/CustomAlert';
+import { SkeletonLoader } from '../../../src/components/SkeletonLoader';
 
 export default function UserOrdersScreen() {
   const { profile } = useAuth();
@@ -114,8 +115,18 @@ export default function UserOrdersScreen() {
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00AA13" />
+        <View style={styles.listContent}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={styles.card}>
+              <SkeletonLoader width={100} height={120} />
+              <View style={[styles.cardContent, { gap: 8 }]}>
+                <SkeletonLoader width={120} height={20} />
+                <SkeletonLoader width={140} height={15} />
+                <SkeletonLoader width={80} height={20} borderRadius={6} />
+                <SkeletonLoader width={100} height={10} style={{ marginTop: 8 }} />
+              </View>
+            </View>
+          ))}
         </View>
       ) : (
         <FlatList

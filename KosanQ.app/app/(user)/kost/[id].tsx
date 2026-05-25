@@ -15,7 +15,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getKostById } from '../../../src/services/kostService';
 import { Kost } from '../../../src/types';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { createBooking } from '../../../src/services/bookingService';
+import { createBooking, checkPendingBooking } from '../../../src/services/bookingService';
+import { checkActiveTenant } from '../../../src/services/tenantService';
 import { useAuth } from '../../../src/context/AuthContext';
 import { CustomAlert } from '../../../src/components/CustomAlert';
 import { listenKostReviews } from '../../../src/services/reviewService';
@@ -95,6 +96,34 @@ export default function UserKostDetailScreen() {
     
     setBookingLoading(true);
     try {
+      // 1. Check if user is already an active tenant in THIS kost
+      const isTenant = await checkActiveTenant(profile.uid, kost.id);
+      if (isTenant) {
+        showAlert(
+          'Pemesanan Tidak Tersedia',
+          'Anda sudah terdaftar sebagai penghuni aktif di kost ini.',
+          'warning'
+        );
+        setBookingLoading(false);
+        return;
+      }
+
+      // 2. Check if user already has a pending booking for THIS kost
+      const hasPending = await checkPendingBooking(profile.uid, kost.id);
+      if (hasPending) {
+        showAlert(
+          'Pesanan Masih Diproses',
+          'Anda sudah memiliki pengajuan sewa yang sedang menunggu konfirmasi (Pending) untuk kost ini.',
+          'warning',
+          () => {
+            setAlertVisible(false);
+            router.push('/(user)/(tabs)/orders');
+          }
+        );
+        setBookingLoading(false);
+        return;
+      }
+
       await createBooking({
         kostId: kost.id,
         userId: profile.uid,

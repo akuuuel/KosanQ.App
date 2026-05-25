@@ -11,6 +11,11 @@ export default function WelcomeScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <View style={styles.content}>
+        <Image 
+          source={require('../../assets/images/icon.png')} 
+          style={styles.abstractLogo} 
+          resizeMode="contain"
+        />
         <View style={styles.header}>
           <Text style={styles.title}>KosanQ</Text>
           <Text style={styles.subtitle}>Solusi Hunian Praktis & Terpercaya</Text>
@@ -137,5 +142,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     marginTop: 2,
+  },
+  abstractLogo: {
+    position: 'absolute',
+    top: '15%',
+    alignSelf: 'center',
+    width: 350,
+    height: 350,
+    opacity: 0.3  ,
+    zIndex: -1,
   },
 });

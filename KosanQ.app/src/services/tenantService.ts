@@ -66,6 +66,8 @@ export const listenTenantsByKost = (kostId: string, callback: (tenants: Tenant[]
   return onSnapshot(q, (snapshot) => {
     const tenants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Tenant));
     callback(tenants);
+  }, (error) => {
+    console.error("[TenantService] Listener error:", error);
   });
 };
 
@@ -88,4 +90,15 @@ export const deactivateTenant = async (tenantId: string, roomId: string) => {
     status: 'available',
     updatedAt: Date.now()
   });
+};
+
+export const checkActiveTenant = async (userId: string, kostId: string) => {
+  const q = query(
+    collection(db, TENANTS_COLLECTION),
+    where('userId', '==', userId),
+    where('kostId', '==', kostId),
+    where('isActive', '==', true)
+  );
+  const snapshot = await getDocs(q);
+  return !snapshot.empty;
 };
