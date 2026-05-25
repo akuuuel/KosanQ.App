@@ -1,0 +1,6 @@
+# Bug report files dari Android Emulator
+bugreport-*.zip
+
+# OS
+.DS_Store
+Thumbs.db
